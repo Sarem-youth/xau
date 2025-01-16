@@ -1,6 +1,6 @@
-
 pandas
 numpy
-python-binance
 plotly
 jinja2
+MetaTrader5
+pytz

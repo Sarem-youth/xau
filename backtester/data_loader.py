@@ -1,32 +1,61 @@
 import pandas as pd
 import numpy as np
-from binance.client import Client
+import MetaTrader5 as mt5
+import pytz
+from datetime import datetime, timedelta
 from config import CONFIG
 
 class DataLoader:
-    def __init__(self, api_key, api_secret):
-        self.client = Client(api_key, api_secret)
+    def __init__(self):
+        # Initialize MT5 connection
+        if not mt5.initialize():
+            print("MT5 initialization failed")
+            mt5.shutdown()
+            raise Exception("MT5 initialization failed")
         
-    def fetch_data(self, timeframe):
-        klines = self.client.get_historical_klines(
-            CONFIG['symbol'],
-            timeframe,
-            str(CONFIG['start_date']),
-            str(CONFIG['end_date'])
+        # Login to MT5
+        authorized = mt5.login(
+            CONFIG['mt5_account'],
+            password=CONFIG['mt5_password'],
+            server=CONFIG['mt5_server']
         )
         
-        df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 
-                                         'volume', 'close_time', 'quote_volume', 'trades', 
-                                         'taker_buy_base', 'taker_buy_quote', 'ignore'])
+        if not authorized:
+            print("MT5 login failed")
+            mt5.shutdown()
+            raise Exception("MT5 login failed")
+    
+    def fetch_data(self, timeframe):
+        # Convert timeframe string to MT5 timeframe constant
+        mt5_timeframes = {
+            '1m': mt5.TIMEFRAME_M1,
+            '5m': mt5.TIMEFRAME_M5,
+            '4h': mt5.TIMEFRAME_H4,
+            '1d': mt5.TIMEFRAME_D1
+        }
         
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        tf = mt5_timeframes.get(timeframe)
+        if tf is None:
+            raise ValueError(f"Invalid timeframe: {timeframe}")
+        
+        # Get historical data from MT5
+        timezone = pytz.timezone("Etc/UTC")
+        utc_from = CONFIG['start_date'].replace(tzinfo=timezone)
+        utc_to = CONFIG['end_date'].replace(tzinfo=timezone)
+        
+        rates = mt5.copy_rates_range(CONFIG['symbol'], tf, utc_from, utc_to)
+        
+        if rates is None:
+            raise Exception("Failed to get data from MT5")
+        
+        # Convert to pandas DataFrame
+        df = pd.DataFrame(rates)
+        df['timestamp'] = pd.to_datetime(df['time'], unit='s')
         df.set_index('timestamp', inplace=True)
+        df.drop('time', axis=1, inplace=True)
         
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = df[col].astype(float)
-            
         return df
-
+    
     def add_indicators(self, df):
         # Add moving averages
         for period in CONFIG['ma_periods']:
@@ -49,3 +78,6 @@ class DataLoader:
         min_rsi = rsi_values.rolling(window=period).min()
         max_rsi = rsi_values.rolling(window=period).max()
         return (rsi_values - min_rsi) / (max_rsi - min_rsi)
+    
+    def __del__(self):
+        mt5.shutdown()

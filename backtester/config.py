@@ -1,4 +1,3 @@
-
 from datetime import datetime
 
 CONFIG = {
@@ -10,5 +9,10 @@ CONFIG = {
     'risk_reward_ratio': 2,
     'risk_per_trade': 0.02,  # 2% risk per trade
     'stoch_rsi_periods': 14,
-    'initial_balance': 100000
+    'initial_balance': 100000,
+    
+    # MT5 specific settings
+    'mt5_account': 213327385,
+    'mt5_password': "da7Vr&YQ",
+    'mt5_server': "OctaFX-Demo",
 }
