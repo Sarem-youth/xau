@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>XAU/USD Trading Strategy Backtest Report</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+        .metric { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        .chart { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>XAU/USD Trading Strategy Backtest Report</h1>
+    <div class="metrics">
+        <div class="metric">
+            <h2>Net Profit</h2>
+            <p id="net-profit"></p>
+        </div>
+        <div class="metric">
+            <h2>Annual Return</h2>
+            <p id="annual-return"></p>
+        </div>
+        <div class="metric">
+            <h2>Max Drawdown</h2>
+            <p id="max-drawdown"></p>
+        </div>
+        <div class="metric">
+            <h2>Sharpe Ratio</h2>
+            <p id="sharpe-ratio"></p>
+        </div>
+    </div>
+    <div class="chart">
+        <h2>Equity Curve</h2>
+        <canvas id="equity-curve"></canvas>
+    </div>
+    <div class="chart">
+        <h2>Drawdown Curve</h2>
+        <canvas id="drawdown-curve"></canvas>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // JavaScript code to populate the metrics and charts
+        document.getElementById('net-profit').innerText = '...';
+        document.getElementById('annual-return').innerText = '...';
+        document.getElementById('max-drawdown').innerText = '...';
+        document.getElementById('sharpe-ratio').innerText = '...';
+
+        var ctxEquity = document.getElementById('equity-curve').getContext('2d');
+        var equityChart = new Chart(ctxEquity, {
+            type: 'line',
+            data: {
+                labels: [], // Add your labels here
+                datasets: [{
+                    label: 'Equity Curve',
+                    data: [], // Add your data here
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { display: true },
+                    y: { display: true }
+                }
+            }
+        });
+
+        var ctxDrawdown = document.getElementById('drawdown-curve').getContext('2d');
+        var drawdownChart = new Chart(ctxDrawdown, {
+            type: 'line',
+            data: {
+                labels: [], // Add your labels here
+                datasets: [{
+                    label: 'Drawdown Curve',
+                    data: [], // Add your data here
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { display: true },
+                    y: { display: true }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
