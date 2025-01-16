@@ -1,7 +1,7 @@
-from data_loader import DataLoader
-from strategy import TradingStrategy
-from report_generator import ReportGenerator
-from config import CONFIG
+from backtester.data_loader import DataLoader
+from backtester.strategy import TradingStrategy
+from backtester.report_generator import ReportGenerator
+from backtester.config import CONFIG
 
 def main():
     # Initialize data loader with MT5
