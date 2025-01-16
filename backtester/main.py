@@ -2,15 +2,12 @@ from data_loader import DataLoader
 from strategy import TradingStrategy
 from report_generator import ReportGenerator
 from config import CONFIG
-import os
 
 def main():
-    # Initialize with your API credentials
-    api_key = os.getenv('BINANCE_API_KEY')
-    api_secret = os.getenv('BINANCE_API_SECRET')
+    # Initialize data loader with MT5
+    loader = DataLoader()
     
     # Load and prepare data
-    loader = DataLoader(api_key, api_secret)
     daily_data = loader.fetch_data('1d')
     h4_data = loader.fetch_data('4h')
     m5_data = loader.fetch_data('5m')
