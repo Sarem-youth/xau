@@ -1,0 +1,6 @@
+
+pandas
+numpy
+python-binance
+plotly
+jinja2
