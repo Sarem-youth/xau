@@ -75,18 +75,15 @@ class TradingStrategy:
         return signals
 
     def _generate_exit_signal(self, position, current_bar, reason="Target reached or stop loss hit"):
+        """Enhanced exit signal with descriptive reasons"""
+        # Calculate exit price and PnL first
         exit_price = current_bar['close']
-        
-        # Calculate points difference
         points_diff = (exit_price - position['entry_price']) if position['action'] == 'BUY' \
                      else (position['entry_price'] - exit_price)
-        
-        # For XAUUSD:
-        # 1 lot = 100 oz
-        # Point value = $0.01 per point per oz
-        # So for 1 lot, each point = $1.00
-        # For 0.01 lot, each point = $0.01
         pnl = points_diff * 100 * position['lot_size']  # Multiply by 100 for gold's point value
+
+        # Create professional exit description
+        exit_details = self._create_professional_exit_description(position, current_bar)
         
         return {
             'id': position['id'],
@@ -98,11 +95,109 @@ class TradingStrategy:
             'exit_price': exit_price,
             'lot_size': position['lot_size'],
             'pnl': pnl,
-            'reason': reason
+            'exit_type': exit_details['type'],
+            'trigger': exit_details['description'],
+            'market_condition': exit_details['market_state'],
+            'indicators_at_exit': exit_details['technical_data']
         }
 
+    def _create_professional_exit_description(self, position, current_bar):
+        """Create detailed, professional exit description"""
+        if self._is_strong_reversal(current_bar, position['action']):
+            exit_type = "Price Reversal Signal"
+            description = self._get_reversal_description(current_bar, position['action'])
+        elif self._conditions_deteriorating(current_bar, position):
+            exit_type = "Market Condition Change"
+            description = self._get_deterioration_description(current_bar, position)
+        elif self._hit_stop_loss(position, current_bar):
+            exit_type = "Risk Management - Stop Loss"
+            description = (f"Price action triggered protective stop at {position['stop_loss']:.2f}. "
+                         f"Market moved {abs(current_bar['close'] - position['entry_price']):.2f} points against position.")
+        else:
+            exit_type = "Technical Exit"
+            description = "Multiple technical factors signaled optimal exit point"
+
+        # Build detailed market state description
+        market_state = (
+            f"Market Structure: {self._get_market_structure(current_bar)}\n"
+            f"Trend State: {self._get_trend_state(current_bar)}\n"
+            f"Volatility: {self._get_volatility_state(current_bar)}\n"
+            f"Volume: {self._get_volume_state(current_bar)}"
+        )
+
+        # Compile technical indicators
+        technical_data = {
+            'rsi': current_bar['RSI'],
+            'price_action': self._get_price_action_description(current_bar),
+            'volatility': current_bar['atr'],
+            'momentum': current_bar['momentum'],
+            'ma_alignment': self._get_ma_alignment_state(current_bar)
+        }
+
+        return {
+            'type': exit_type,
+            'description': description,
+            'market_state': market_state,
+            'technical_data': technical_data
+        }
+
+    def _get_market_structure(self, bar):
+        """Analyze overall market structure"""
+        if bar['close'] > bar['MA_20'] > bar['MA_50']:
+            return "Bullish trend structure with strong momentum"
+        elif bar['close'] < bar['MA_20'] < bar['MA_50']:
+            return "Bearish trend structure with strong momentum"
+        elif bar['close'] > bar['MA_20']:
+            return "Short-term bullish structure"
+        else:
+            return "Short-term bearish structure"
+
+    def _get_trend_state(self, bar):
+        """Get detailed trend state description"""
+        trend_strength = abs(bar['momentum'])
+        if trend_strength > 2.0:
+            strength = "Strong"
+        elif trend_strength > 1.0:
+            strength = "Moderate"
+        else:
+            strength = "Weak"
+
+        direction = "Upward" if bar['close'] > bar['MA_20'] else "Downward"
+        return f"{strength} {direction} trend"
+
+    def _get_volatility_state(self, bar):
+        """Get volatility state description"""
+        if self._is_high_volatility(bar):
+            return "Elevated volatility conditions"
+        return "Normal volatility conditions"
+
+    def _get_volume_state(self, bar):
+        """Get volume analysis description"""
+        if bar['volume_ratio'] > 2.0:
+            return "Significantly above average volume"
+        elif bar['volume_ratio'] > 1.5:
+            return "Above average volume"
+        elif bar['volume_ratio'] < 0.7:
+            return "Below average volume"
+        else:
+            return "Normal volume conditions"
+
+    def _get_ma_alignment_state(self, bar):
+        """Get moving average alignment description"""
+        if bar['MA_20'] > bar['MA_50']:
+            separation = (bar['MA_20'] - bar['MA_50']) / bar['MA_50'] * 100
+            if separation > 0.1:
+                return "Strong bullish MA alignment"
+            return "Slight bullish MA alignment"
+        else:
+            separation = (bar['MA_50'] - bar['MA_20']) / bar['MA_50'] * 100
+            if separation > 0.1:
+                return "Strong bearish MA alignment"
+            return "Slight bearish MA alignment"
+
     def _record_trade(self, exit_signal):
-        self.trades.append({
+        """Enhanced trade recording with detailed metadata"""
+        trade_details = {
             'id': exit_signal['id'],
             'entry_time': exit_signal['entry_time'],
             'exit_time': exit_signal['exit_time'],
@@ -111,9 +206,145 @@ class TradingStrategy:
             'action': self.current_position['action'],
             'lot_size': self.current_position['lot_size'],
             'pnl': exit_signal['pnl'],
-            'balance': CONFIG['initial_balance'] + sum(t['pnl'] for t in self.trades) + exit_signal['pnl']
-        })
-        print(f"Trade recorded: {exit_signal}")  # Debug print
+            'balance': CONFIG['initial_balance'] + sum(t['pnl'] for t in self.trades) + exit_signal['pnl'],
+            
+            # Add new detailed metadata
+            'entry_reason': {
+                'trend_alignment': self.current_position.get('trend_alignment', ''),
+                'pattern_detected': self.current_position.get('pattern_detected', ''),
+                'signal_quality': self.current_position.get('signal_quality', 0),
+                'market_context': self.current_position.get('market_context', ''),
+                'key_levels': self.current_position.get('key_levels', []),
+                'indicators': {
+                    'rsi': self.current_position.get('entry_rsi', 0),
+                    'stoch_rsi': self.current_position.get('entry_stoch_rsi', 0),
+                    'ma_alignment': self.current_position.get('ma_alignment', ''),
+                    'momentum': self.current_position.get('momentum', 0)
+                }
+            },
+            'exit_reason': {
+                'type': exit_signal.get('exit_type', 'unknown'),
+                'trigger': exit_signal.get('trigger', ''),
+                'market_condition': exit_signal.get('market_condition', ''),
+                'indicators_at_exit': {
+                    'rsi': exit_signal.get('exit_rsi', 0),
+                    'price_action': exit_signal.get('price_action', ''),
+                    'volatility': exit_signal.get('volatility', 0)
+                }
+            },
+            'trade_metrics': {
+                'risk_reward': self.current_position.get('risk_reward', 0),
+                'risk_amount': self.current_position.get('risk_amount', 0),
+                'max_favorable_excursion': self.current_position.get('max_favorable', 0),
+                'max_adverse_excursion': self.current_position.get('max_adverse', 0),
+                'time_in_trade': (exit_signal['exit_time'] - exit_signal['entry_time']).total_seconds() / 3600,
+                'profit_factor': exit_signal['pnl'] / self.current_position.get('risk_amount', 1) if exit_signal['pnl'] > 0 else 0
+            }
+        }
+        
+        self.trades.append(trade_details)
+        print(f"Trade recorded: {exit_signal}")
+
+    def _get_reversal_description(self, bar, position_type):
+        """Get detailed reversal description"""
+        reasons = []
+        
+        if self._is_engulfing_pattern(bar):
+            reasons.append(f"{'Bearish' if position_type == 'BUY' else 'Bullish'} engulfing pattern")
+        
+        if self._is_pin_bar(bar):
+            reasons.append(f"{'Bearish' if position_type == 'BUY' else 'Bullish'} pin bar")
+        
+        if bar['RSI'] > 70 and position_type == 'BUY':
+            reasons.append("Overbought RSI condition")
+        elif bar['RSI'] < 30 and position_type == 'SELL':
+            reasons.append("Oversold RSI condition")
+        
+        if bar['volume_ratio'] > 2.0:
+            reasons.append("High volume spike")
+        
+        return " with ".join(reasons) if reasons else "Price action reversal"
+
+    def _get_deterioration_description(self, bar, position):
+        """Get detailed market deterioration description"""
+        reasons = []
+        
+        if position['action'] == 'BUY':
+            if bar['close'] < bar['MA_20']:
+                reasons.append("Price broke below 20MA")
+            if bar['MA_20'] < bar['MA_50']:
+                reasons.append("20MA crossed below 50MA")
+        else:
+            if bar['close'] > bar['MA_20']:
+                reasons.append("Price broke above 20MA")
+            if bar['MA_20'] > bar['MA_50']:
+                reasons.append("20MA crossed above 50MA")
+        
+        if abs(bar['momentum']) < abs(bar['momentum']) * 0.5:
+            reasons.append("Momentum weakening")
+        
+        if bar['volume_ratio'] < 0.7:
+            reasons.append("Volume declining")
+        
+        if self._is_high_volatility(bar):
+            reasons.append("Volatility increasing")
+        
+        return ", ".join(reasons) if reasons else "Deteriorating market conditions"
+
+    def _get_market_description(self, bar):
+        """Get current market condition description"""
+        conditions = []
+        
+        # Trend description
+        if bar['close'] > bar['MA_20'] > bar['MA_50']:
+            conditions.append("Strong uptrend")
+        elif bar['close'] < bar['MA_20'] < bar['MA_50']:
+            conditions.append("Strong downtrend")
+        elif bar['close'] > bar['MA_20']:
+            conditions.append("Short-term bullish")
+        else:
+            conditions.append("Short-term bearish")
+        
+        # Volatility description
+        if self._is_high_volatility(bar):
+            conditions.append("high volatility")
+        else:
+            conditions.append("normal volatility")
+        
+        # Volume description
+        if bar['volume_ratio'] > 1.5:
+            conditions.append("strong volume")
+        elif bar['volume_ratio'] < 0.7:
+            conditions.append("weak volume")
+        
+        return " with ".join(conditions)
+
+    def _get_price_action_description(self, bar):
+        """Get descriptive price action summary"""
+        body_size = abs(bar['close'] - bar['open'])
+        upper_wick = bar['high'] - max(bar['open'], bar['close'])
+        lower_wick = min(bar['open'], bar['close']) - bar['low']
+        
+        if bar['close'] > bar['open']:
+            color = "bullish"
+        else:
+            color = "bearish"
+        
+        if body_size < (bar['high'] - bar['low']) * 0.3:
+            size = "doji"
+        elif body_size > bar['atr']:
+            size = "large"
+        else:
+            size = "normal"
+        
+        if upper_wick > body_size * 2:
+            wick = "long upper wick"
+        elif lower_wick > body_size * 2:
+            wick = "long lower wick"
+        else:
+            wick = "normal wicks"
+        
+        return f"{size} {color} candle with {wick}"
 
     def _get_trend(self, row):
         """Simplified trend determination"""
@@ -431,7 +662,7 @@ class TradingStrategy:
         take_profit = entry_price + (risk_pips * CONFIG['risk_reward_ratio'] / 10000) if action == 'BUY' \
                      else entry_price - (risk_pips * CONFIG['risk_reward_ratio'] / 10000)
         
-        return {
+        signal = {
             'id': self.trade_id,
             'timestamp': row.name,
             'action': action,
@@ -441,6 +672,44 @@ class TradingStrategy:
             'lot_size': lot_size,
             'position_size': lot_size,  # Use lot_size as position_size
             'reason': f"Aligned trends: Daily={daily_trend}, 4H={h4_trend}, 5M={m5_trend}"
+        }
+        
+        # Add detailed entry analysis
+        entry_analysis = self._create_entry_analysis(row, action, daily_trend, h4_trend, m5_trend)
+        signal.update({
+            'entry_analysis': entry_analysis,
+            'modifications': [],  # Track all trade modifications
+        })
+        
+        return signal
+
+    def _create_entry_analysis(self, row, action, daily_trend, h4_trend, m5_trend):
+        """Create detailed entry analysis"""
+        return {
+            'setup_type': self._determine_setup_type(row, action),
+            'trend_analysis': {
+                'daily': daily_trend,
+                'h4': h4_trend,
+                'm5': m5_trend,
+                'alignment': self._analyze_trend_alignment(daily_trend, h4_trend, m5_trend),
+                'strength': self._calculate_trend_strength(row)
+            },
+            'technical_signals': {
+                'rsi': row['RSI'],
+                'stochastic': row['StochRSI'],
+                'momentum': row['momentum'],
+                'volume_context': self._analyze_volume_context(row)
+            },
+            'price_action': {
+                'pattern': self._identify_candlestick_pattern(row),
+                'context': self._analyze_price_context(row)
+            },
+            'support_resistance': self._identify_key_levels(row),
+            'risk_metrics': {
+                'risk_reward': self._calculate_risk_reward(row),
+                'stop_distance': self._calculate_stop_distance(row),
+                'quality_score': self._calculate_setup_quality(row)
+            }
         }
 
     def _calculate_profit_pips(self, position, current_bar):
@@ -851,8 +1120,11 @@ class TradingStrategy:
             return False
 
     def _adjust_stop_loss(self, position, current_bar):
-        """Adjust stop loss based on market conditions"""
+        """Enhanced stop loss adjustment with tracking"""
         try:
+            old_stop = position['stop_loss']
+            
+            # Existing stop loss adjustment logic
             profit_pips = self._calculate_profit_pips(position, current_bar)
             
             if profit_pips >= CONFIG['breakeven_rules']['min_profit_ticks']:
@@ -874,8 +1146,285 @@ class TradingStrategy:
                 position['stop_loss'] = max(position['stop_loss'], new_stop)
             else:
                 position['stop_loss'] = min(position['stop_loss'], new_stop)
+            
+            # Record the modification if stop changed
+            if position['stop_loss'] != old_stop:
+                modification = {
+                    'time': current_bar.name,
+                    'type': 'Stop Loss Adjustment',
+                    'old_value': old_stop,
+                    'new_value': position['stop_loss'],
+                    'reason': self._get_stop_adjustment_reason(position, current_bar),
+                    'market_context': self._get_market_description(current_bar)
+                }
+                position['modifications'].append(modification)
                 
         except Exception as e:
             print(f"Error adjusting stop loss: {e}")
+
+    def _get_stop_adjustment_reason(self, position, current_bar):
+        """Get detailed reason for stop loss adjustment"""
+        profit_pips = self._calculate_profit_pips(position, current_bar)
+        
+        if profit_pips >= CONFIG['breakeven_rules']['min_profit_ticks']:
+            return f"Moving to breakeven after {profit_pips:.1f} pips in profit"
+        elif profit_pips >= CONFIG['trailing_stop']['activation_ticks']:
+            return f"Activating trailing stop at {profit_pips:.1f} pips profit"
+        else:
+            return "Volatility-based stop adjustment"
+
+    def _determine_setup_type(self, row, action):
+        """Determine the type of trading setup"""
+        # Check for trend-following setup
+        if self._is_trend_following_setup(row, action):
+            return "Trend Following"
+        
+        # Check for reversal setup
+        if self._is_reversal_setup(row, action):
+            return "Counter-Trend Reversal"
+        
+        # Check for range/breakout setup
+        if self._is_range_breakout(row, action):
+            return "Range Breakout"
+            
+        return "Momentum/Scalp"
+
+    def _is_trend_following_setup(self, row, action):
+        """Check if setup is trend-following"""
+        trend_aligned = (
+            (action == 'BUY' and row['MA_20'] > row['MA_50']) or
+            (action == 'SELL' and row['MA_20'] < row['MA_50'])
+        )
+        momentum_aligned = (
+            (action == 'BUY' and row['momentum'] > 0) or
+            (action == 'SELL' and row['momentum'] < 0)
+        )
+        return trend_aligned and momentum_aligned
+
+    def _is_reversal_setup(self, row, action):
+        """Check if setup is a reversal"""
+        # Oversold conditions for buy, overbought for sell
+        rsi_reversal = (
+            (action == 'BUY' and row['RSI'] < 30) or
+            (action == 'SELL' and row['RSI'] > 70)
+        )
+        # Price action confirmation
+        pattern_reversal = (
+            self._is_engulfing_pattern(row) or
+            self._is_pin_bar(row)
+        )
+        return rsi_reversal and pattern_reversal
+
+    def _is_range_breakout(self, row, action):
+        """Check if setup is a range breakout"""
+        # Calculate recent price range
+        range_high = row['high_10']
+        range_low = row['low_10']
+        range_size = range_high - range_low
+        
+        # Check if price is breaking out of range
+        breakout = (
+            (action == 'BUY' and row['close'] > range_high) or
+            (action == 'SELL' and row['close'] < range_low)
+        )
+        
+        # Volume confirmation
+        volume_surge = row['volume_ratio'] > 1.5
+        
+        return breakout and volume_surge
+
+    def _analyze_trend_alignment(self, daily_trend, h4_trend, m5_trend):
+        """Analyze trend alignment across timeframes"""
+        alignments = []
+        
+        if daily_trend == h4_trend == m5_trend:
+            alignments.append("Strong alignment across all timeframes")
+        elif daily_trend == h4_trend:
+            alignments.append("Higher timeframes aligned")
+        elif h4_trend == m5_trend:
+            alignments.append("Lower timeframes aligned")
+        else:
+            alignments.append("Mixed trend signals")
+            
+        return ", ".join(alignments)
+
+    def _calculate_trend_strength(self, row):
+        """Calculate trend strength based on multiple factors"""
+        strength = 0
+        
+        # MA alignment strength
+        ma_diff = (row['MA_20'] - row['MA_50']) / row['MA_50']
+        strength += abs(ma_diff) * 5
+        
+        # Momentum contribution
+        strength += abs(row['momentum']) / 100
+        
+        # Volume confirmation
+        if row['volume_ratio'] > 1.5:
+            strength += 0.2
+        
+        # Normalize to 0-1 range
+        return min(max(strength, 0), 1)
+
+    def _analyze_volume_context(self, row):
+        """Analyze volume context"""
+        contexts = []
+        
+        ratio = row['volume_ratio']
+        if (ratio > 2.0):
+            contexts.append("Very high volume")
+        elif (ratio > 1.5):
+            contexts.append("Above average volume")
+        elif (ratio < 0.7):
+            contexts.append("Below average volume")
+        else:
+            contexts.append("Normal volume")
+            
+        # Add volume trend
+        if (ratio > row.get('prev_volume_ratio', ratio)):
+            contexts.append("increasing")
+        else:
+            contexts.append("decreasing")
+            
+        return " - ".join(contexts)
+
+    def _identify_candlestick_pattern(self, row):
+        """Identify candlestick patterns"""
+        patterns = []
+        
+        if self._is_engulfing_pattern(row):
+            patterns.append("Engulfing")
+        if self._is_pin_bar(row):
+            patterns.append("Pin Bar")
+        if self._is_doji(row):
+            patterns.append("Doji")
+            
+        return patterns if patterns else ["No significant pattern"]
+
+    def _analyze_price_context(self, row):
+        """Analyze price action context"""
+        context = []
+        
+        # Trend context
+        if row['close'] > row['MA_20'] > row['MA_50']:
+            context.append("Uptrend")
+        elif row['close'] < row['MA_20'] < row['MA_50']:
+            context.append("Downtrend")
+        else:
+            context.append("Sideways")
+            
+        # Volatility context
+        if self._is_high_volatility(row):
+            context.append("High volatility")
+        else:
+            context.append("Normal volatility")
+            
+        # Support/Resistance context
+        if self._near_key_level(row):
+            context.append("Near key level")
+            
+        return " - ".join(context)
+
+    def _calculate_risk_reward(self, row):
+        """Calculate initial risk/reward ratio"""
+        atr = row['atr']
+        potential_risk = 2 * atr  # 2x ATR for stop loss
+        potential_reward = 3 * atr  # 3x ATR for target
+        return potential_reward / potential_risk if potential_risk > 0 else 0
+
+    def _calculate_stop_distance(self, row):
+        """Calculate and validate stop distance"""
+        atr = row['atr']
+        return max(2 * atr, CONFIG['min_stop_distance'] / 10000)
+
+    def _calculate_setup_quality(self, row):
+        """Calculate overall setup quality score"""
+        # Reuse existing quality calculation with additional factors
+        base_quality = self._calculate_pattern_quality(row)
+        
+        # Add time-based factors
+        if self._is_optimal_trading_hour(row.name):
+            base_quality *= 1.2
+        
+        # Add volatility adjustment
+        if self._is_optimal_volatility(row):
+            base_quality *= 1.1
+            
+        return min(base_quality, 1.0)
+
+    def _is_optimal_trading_hour(self, timestamp):
+        """Check if current time is during optimal trading hours"""
+        hour = timestamp.hour
+        return (
+            (8 <= hour <= 16) or  # London session
+            (13 <= hour <= 20)    # NY session
+        )
+
+    def _is_optimal_volatility(self, row):
+        """Check if volatility is in optimal range"""
+        atr = row['atr']
+        return 0.0005 <= atr <= 0.002
+
+    def _is_doji(self, row):
+        """Check for doji pattern"""
+        body = abs(row['close'] - row['open'])
+        total_range = row['high'] - row['low']
+        return body <= total_range * 0.1
+
+    def _identify_key_levels(self, row):
+        """Identify key support and resistance levels"""
+        levels = []
+        
+        # Use recent highs/lows
+        if hasattr(row, 'high_10'):
+            levels.append({
+                'type': 'Resistance',
+                'level': row['high_10'],
+                'strength': 'Recent High'
+            })
+        
+        if hasattr(row, 'low_10'):
+            levels.append({
+                'type': 'Support',
+                'level': row['low_10'],
+                'strength': 'Recent Low'
+            })
+        
+        # Add moving averages as dynamic levels
+        if hasattr(row, 'MA_20'):
+            levels.append({
+                'type': 'Dynamic',
+                'level': row['MA_20'],
+                'strength': 'MA20'
+            })
+        
+        if hasattr(row, 'MA_50'):
+            levels.append({
+                'type': 'Dynamic',
+                'level': row['MA_50'],
+                'strength': 'MA50'
+            })
+        
+        # Find psychological levels (round numbers)
+        price = row['close']
+        round_100 = round(price / 100) * 100
+        round_50 = round(price / 50) * 50
+        
+        levels.append({
+            'type': 'Psychological',
+            'level': round_100,
+            'strength': 'Round 100'
+        })
+        
+        levels.append({
+            'type': 'Psychological',
+            'level': round_50,
+            'strength': 'Round 50'
+        })
+        
+        # Sort levels by price
+        levels.sort(key=lambda x: x['level'])
+        
+        return levels
 
 # ... existing code for other helper methods ...

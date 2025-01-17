@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import MetaTrader5 as mt5
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import pandas as pd
 import numpy as np
 import MetaTrader5 as mt5
@@ -50,9 +50,13 @@ class DataLoader:
         
         # Get historical data from MT5
         timezone = pytz.timezone("Etc/UTC")
-        utc_from = CONFIG['start_date'].replace(tzinfo=timezone)
-        utc_to = CONFIG['end_date'].replace(tzinfo=timezone)
         
+        # Add buffer days to ensure we have enough data for indicators
+        buffer_days = 5  # Add 5 days of buffer
+        utc_from = (CONFIG['start_date'] - timedelta(days=buffer_days)).replace(tzinfo=timezone)
+        utc_to = (CONFIG['end_date'] + timedelta(days=1)).replace(tzinfo=timezone)  # Add one day to include full end date
+        
+        print(f"Fetching {timeframe} data from {utc_from} to {utc_to}")
         rates = mt5.copy_rates_range(CONFIG['symbol'], tf, utc_from, utc_to)
         
         if rates is None:
@@ -64,10 +68,23 @@ class DataLoader:
         df.set_index('timestamp', inplace=True)
         df.drop('time', axis=1, inplace=True)
         
+        # First filter by date range to ensure we have the full range including Jan 1st
+        df = df[(df.index >= CONFIG['start_date']) & (df.index <= CONFIG['end_date'])]
+        
+        # Then apply market hours filter except for Jan 1st
+        if CONFIG['restrict_trading_hours']:
+            df['market_open'] = df.index.map(self._is_market_open)
+            df['trading_hour'] = df.index.map(self._is_valid_trading_hour)
+            df = df[df['market_open'] & df['trading_hour']]
+            df = df.drop(['market_open', 'trading_hour'], axis=1)
+        
+        print(f"Date range: {df.index.min()} to {df.index.max()}")
+        print(f"Loaded {len(df)} bars for {timeframe} after filtering")
         return df
     
     def add_indicators(self, df):
         """Add basic indicators with proper initialization"""
+        # Use ffill/bfill instead of fillna with method
         df = df.copy()
         
         # Basic moving averages
@@ -155,5 +172,53 @@ class DataLoader:
         
         return stoch_rsi.fillna(0.5)  # Default to middle value
     
+    def load_data(self):
+        # ...existing code...
+        df = df[(df.index >= CONFIG['start_date']) & (df.index <= CONFIG['end_date'])]
+
+        if CONFIG.get('restrict_trading_hours'):
+            # Exclude weekends or other closed-market periods
+            df = df[df.index.dayofweek < 5]
+            # ...any additional holiday or market-closed filtering...
+
+        # ...existing code...
+
+    def _is_market_open(self, timestamp):
+        """Check if market is open at given timestamp"""
+        weekday = timestamp.weekday()
+        current_time = timestamp.time()
+        
+        # Check if date is Jan 1st and include it regardless of time
+        if timestamp.date() == CONFIG['start_date'].date():
+            return True
+            
+        # Normal market hour checks
+        if weekday == 5:  # Saturday
+            return False
+        elif weekday == 6:  # Sunday
+            sunday_open = datetime.strptime(CONFIG['market_hours']['forex']['sunday_open'], '%H:%M').time()
+            return current_time >= sunday_open
+        elif weekday == 4:  # Friday
+            friday_close = datetime.strptime(CONFIG['market_hours']['forex']['friday_close'], '%H:%M').time()
+            return current_time <= friday_close
+        return True
+
+    def _is_valid_trading_hour(self, timestamp):
+        """Check if current time is within allowed trading sessions"""
+        if not CONFIG['trading_hours']['enabled']:
+            return True
+            
+        current_time = timestamp.time()
+        
+        # Check each trading session
+        for session in CONFIG['trading_hours']['sessions']:
+            session_start = datetime.strptime(session['start'], '%H:%M').time()
+            session_end = datetime.strptime(session['end'], '%H:%M').time()
+            
+            if session_start <= current_time <= session_end:
+                return True
+                
+        return False
+
     def __del__(self):
         mt5.shutdown()

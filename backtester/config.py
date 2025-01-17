@@ -2,8 +2,8 @@ import os
 from datetime import datetime
 
 CONFIG = {
-    'start_date': datetime(2024, 1, 1),
-    'end_date': datetime(2024, 1, 31),
+    'start_date': datetime(2024, 1, 1, 0, 0, 0),  # Start at beginning of day
+    'end_date': datetime(2024, 1, 4, 23, 59, 59),  # End at end of day
     'symbol': 'XAUUSD',
     'timeframes': ['5m', '4h', '1d'],
     'ma_periods': [20, 50],
@@ -89,6 +89,40 @@ CONFIG = {
         'atr_multiplier': 1.5,       # Tighter stops
         'min_distance': 100,         # Minimum 10 pip stop
         'max_distance': 200,         # Maximum 20 pip stop
+    },
+
+    'restrict_trading_hours': True,
+
+    # Trading hours filter (all times in UTC)
+    'trading_hours': {
+        'start': '00:00',
+        'end': '23:59',
+        'enabled': True
+    },
+
+    # Market hours configuration (all times in UTC)
+    'market_hours': {
+        'forex': {
+            'sunday_open': '22:00',    # Sunday open (Monday in Asia)
+            'friday_close': '22:00',   # Friday close
+            'daily_close_duration': 0,  # No break between sessions
+        },
+        'ignore_holidays': False,      # Set to True to skip known holidays
+        'holidays': [
+            # Add specific dates in 'YYYY-MM-DD' format if needed
+        ],
+        'include_start_date': True     # Always include start date regardless of market hours
+    },
+
+    # Trading hours restriction
+    'restrict_trading_hours': True,
+    'trading_hours': {
+        'enabled': True,
+        'sessions': [
+            {'start': '00:00', 'end': '23:59', 'name': 'All Day Jan 1'},  # Special session for Jan 1
+            {'start': '08:00', 'end': '16:30', 'name': 'London'},
+            {'start': '13:30', 'end': '20:00', 'name': 'New York'}
+        ]
     },
 
     # MT5 specific settings
